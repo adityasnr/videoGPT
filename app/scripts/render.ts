@@ -51,21 +51,31 @@ async function openPage(url: string) {
   if (isMac) {
     chromeArgs.push('--use-angle=metal');
   } else {
-    chromeArgs.push('--use-gl=angle');
+    const gl = process.env.CHROME_GL;
+    if (gl && gl !== 'none') {
+      chromeArgs.push(`--use-gl=${gl}`);
+    } else {
+      chromeArgs.push('--use-gl=angle');
+    }
   }
 
   let browser;
+  const channel = process.env.BROWSER_CHANNEL;
+  const launchOptions: any = {
+    headless: !flag('headed'),
+    args: chromeArgs,
+  };
+  if (channel && channel !== 'none') {
+    launchOptions.channel = channel;
+  } else if (!channel && !process.env.CI) {
+    launchOptions.channel = 'chrome';
+  }
+
   try {
-    browser = await chromium.launch({
-      channel: process.env.BROWSER_CHANNEL || 'chrome',
-      headless: !flag('headed'),
-      args: chromeArgs,
-    });
+    browser = await chromium.launch(launchOptions);
   } catch {
-    browser = await chromium.launch({
-      headless: !flag('headed'),
-      args: chromeArgs,
-    });
+    delete launchOptions.channel;
+    browser = await chromium.launch(launchOptions);
   }
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   const logs: string[] = [];

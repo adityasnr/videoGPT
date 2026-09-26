@@ -10,7 +10,7 @@ on:
       to:
         description: 'End time in seconds (leave empty for full song ~156.65s)'
         required: false
-        default: ''
+        default: '15'
       fps:
         description: 'Frames per second'
         required: false
@@ -57,10 +57,10 @@ jobs:
         with:
           bun-version: latest
 
-      - name: Install FFmpeg & Graphics Libraries
+      - name: Install System Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y ffmpeg libgl1-mesa-dri libgl1-mesa-glx xvfb
+          sudo apt-get install -y ffmpeg xvfb
 
       - name: Install Dependencies & Chromium
         working-directory: app
@@ -85,13 +85,18 @@ jobs:
           SCALE="${{ github.event.inputs.scale || '1' }}"
           PRESET="${{ github.event.inputs.preset || 'fast' }}"
 
+          # On git push, render a 15-second teaser to keep CI fast and verify pipeline
+          if [ "${{ github.event_name }}" = "push" ] && [ -z "$TO" ]; then
+            TO="15"
+          fi
+
           CMD="bun scripts/render.ts video --from $FROM --fps $FPS --samples $SAMPLES --shutter $SHUTTER --crf $CRF --scale $SCALE --preset $PRESET --out ../out/pdoom.mp4"
           if [ -n "$TO" ]; then
             CMD="$CMD --to $TO"
           fi
 
           echo "Running command: $CMD"
-          eval $CMD
+          xvfb-run -a --server-args="-screen 0 1920x1080x24" $CMD
 
       - name: Check Output File
         run: |
