@@ -22,6 +22,20 @@ const SCALE = Math.max(1, Math.round(+opt('scale', '1')!));
 const OW = 1920 * SCALE, OH = 1080 * SCALE; // output size
 const ROOT = path.resolve(APP, '..');
 
+function formatDuration(sec: number): string {
+  if (!isFinite(sec) || sec < 0) return '--:--';
+  const m = Math.floor(sec / 60);
+  const s = Math.floor(sec % 60);
+  return `${String(m).padStart(2, '0')}m ${String(s).padStart(2, '0')}s`;
+}
+
+function renderBar(fraction: number, width = 20): string {
+  const clamped = Math.max(0, Math.min(1, fraction));
+  const filled = Math.round(clamped * width);
+  const empty = width - filled;
+  return '█'.repeat(filled) + '░'.repeat(empty);
+}
+
 async function reachable(url: string) {
   try { const r = await fetch(url, { signal: AbortSignal.timeout(1500) }); return r.ok; } catch { return false; }
 }
@@ -175,12 +189,11 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
         ws.send(String(frames)); // ack: the page keeps at most a few frames ahead of ffmpeg (bounded memory at 4K)
         if (frames % 60 === 0 || frames === total) {
           const el = (performance.now() - t0) / 1000;
-          const msg = `${frames}/${total} frames (${((frames / total) * 100).toFixed(1)}%)  ${(frames / el).toFixed(1)} fps  eta ${((total - frames) / (frames / el)).toFixed(0)}s`;
-          if (process.env.CI) {
-            if (frames % 300 === 0 || frames === total) console.log(msg);
-          } else {
-            process.stdout.write(`\r${msg}   `);
-          }
+          const fpsCur = frames / (el || 0.001);
+          const etaSec = Math.max(0, (total - frames) / (fpsCur || 1));
+          const pct = ((frames / total) * 100).toFixed(1);
+          const bar = renderBar(frames / total, 20);
+          console.log(`[${bar}] ${pct.padStart(5)}% | ${String(frames).padStart(String(total).length)}/${total} frames | ${fpsCur.toFixed(1)} FPS | ETA: ${formatDuration(etaSec)} | Elapsed: ${formatDuration(el)}`);
         }
       },
     },
@@ -191,7 +204,7 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
   ff.stdin.end();
   await ff.exited;
   server.stop();
-  console.log(`\nwrote ${out} (${frames} frames in ${((performance.now() - t0) / 1000).toFixed(1)}s)`);
+  console.log(`\n✓ Completed! Saved video to ${out} (${frames} frames in ${formatDuration((performance.now() - t0) / 1000)})`);
 }
 
 const { url, stop } = await ensureServer();
