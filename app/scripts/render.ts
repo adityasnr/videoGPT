@@ -48,8 +48,20 @@ async function openPage(url: string) {
     '--no-sandbox',
     '--disable-dev-shm-usage',
   ];
+  const isLinux = process.platform === 'linux';
+  const hasNvidia = isLinux && (existsSync('/dev/nvidia0') || existsSync('/dev/nvidiactl'));
+
   if (isMac) {
     chromeArgs.push('--use-angle=metal');
+  } else if (hasNvidia || process.env.CHROME_GL === 'egl') {
+    chromeArgs.push(
+      '--use-gl=egl',
+      '--enable-webgl',
+      '--enable-webgl2-compute-context',
+      '--disable-gpu-sandbox',
+      '--in-process-gpu',
+      '--enable-zero-copy'
+    );
   } else {
     const gl = process.env.CHROME_GL;
     if (gl && gl !== 'none') {
@@ -88,8 +100,17 @@ async function openPage(url: string) {
   if (err) throw new Error(`app failed to boot:\n${err}\n${logs.join('\n')}`);
   const size: [number, number] = await page.evaluate(() => [(window as any).__pdoom.width ?? 1920, (window as any).__pdoom.height ?? 1080]);
   if (size[0] !== OW || size[1] !== OH) throw new Error(`app renders ${size[0]}x${size[1]}, expected ${OW}x${OH} (--scale ${SCALE})`);
-  const sceneErrors: string[] = await page.evaluate(() => (window as any).__pdoom.errors);
-  if (sceneErrors.length) console.error('SCENE ERRORS:\n' + sceneErrors.join('\n'));
+  const gpuRenderer = await page.evaluate(() => {
+    try {
+      const gl = document.createElement('canvas').getContext('webgl2')!;
+      const ext = gl?.getExtension('WEBGL_debug_renderer_info');
+      return ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : gl?.getParameter(gl?.RENDERER) ?? 'unknown';
+    } catch (e) {
+      return 'failed to query GL: ' + e;
+    }
+  });
+  console.log(`✓ Active WebGL Renderer: ${gpuRenderer}`);
+
   return { browser, page, logs };
 }
 
