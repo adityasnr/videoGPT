@@ -38,11 +38,35 @@ async function ensureServer(): Promise<{ url: string; stop: () => void }> {
 }
 
 async function openPage(url: string) {
-  const browser = await chromium.launch({
-    channel: 'chrome',
-    headless: !flag('headed'),
-    args: ['--use-angle=metal', '--enable-gpu-rasterization', '--ignore-gpu-blocklist', '--disable-background-timer-throttling', '--disable-renderer-backgrounding', '--disable-backgrounding-occluded-windows'],
-  });
+  const isMac = process.platform === 'darwin';
+  const chromeArgs = [
+    '--enable-gpu-rasterization',
+    '--ignore-gpu-blocklist',
+    '--disable-background-timer-throttling',
+    '--disable-renderer-backgrounding',
+    '--disable-backgrounding-occluded-windows',
+    '--no-sandbox',
+    '--disable-dev-shm-usage',
+  ];
+  if (isMac) {
+    chromeArgs.push('--use-angle=metal');
+  } else {
+    chromeArgs.push('--use-gl=angle');
+  }
+
+  let browser;
+  try {
+    browser = await chromium.launch({
+      channel: process.env.BROWSER_CHANNEL || 'chrome',
+      headless: !flag('headed'),
+      args: chromeArgs,
+    });
+  } catch {
+    browser = await chromium.launch({
+      headless: !flag('headed'),
+      args: chromeArgs,
+    });
+  }
   const page = await browser.newPage({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 });
   const logs: string[] = [];
   page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') logs.push(`[${m.type()}] ${m.text()}`); });

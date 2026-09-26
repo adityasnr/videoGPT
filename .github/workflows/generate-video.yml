@@ -1,0 +1,109 @@
+name: Generate Video
+
+on:
+  workflow_dispatch:
+    inputs:
+      from:
+        description: 'Start time in seconds'
+        required: false
+        default: '0'
+      to:
+        description: 'End time in seconds (leave empty for full song ~156.65s)'
+        required: false
+        default: ''
+      fps:
+        description: 'Frames per second'
+        required: false
+        default: '60'
+      samples:
+        description: 'Samples per frame (1 for speed, 2-4 for temporal AA)'
+        required: false
+        default: '1'
+      shutter:
+        description: 'Shutter angle/fraction (0.1 - 0.5)'
+        required: false
+        default: '0.5'
+      crf:
+        description: 'x264 CRF quality (16 = visually lossless, 23 = default)'
+        required: false
+        default: '18'
+      scale:
+        description: 'Scale multiplier (1 = 1080p, 2 = 4K)'
+        required: false
+        default: '1'
+      preset:
+        description: 'FFmpeg x264 preset (ultrafast, fast, medium, slow)'
+        required: false
+        default: 'fast'
+      theme:
+        description: 'Color theme (cyberpunk, solarpunk, matrix, ultraviolet, bloodmoon, arctic, hazard)'
+        required: false
+        default: 'cyberpunk'
+  push:
+    branches: [ main ]
+
+jobs:
+  render-video:
+    name: Render Video with Headless Chrome & FFmpeg
+    runs-on: ubuntu-latest
+    timeout-minutes: 360
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install FFmpeg & Graphics Libraries
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg libgl1-mesa-dri libgl1-mesa-glx xvfb
+
+      - name: Install Dependencies & Chromium
+        working-directory: app
+        run: |
+          bun install
+          bunx playwright install --with-deps chromium
+
+      - name: Render Music Video
+        working-directory: app
+        env:
+          PDOOM_THEME: ${{ github.event.inputs.theme || 'cyberpunk' }}
+          CHROME_GL: 'angle'
+        run: |
+          mkdir -p ../out
+          
+          FROM="${{ github.event.inputs.from || '0' }}"
+          TO="${{ github.event.inputs.to }}"
+          FPS="${{ github.event.inputs.fps || '60' }}"
+          SAMPLES="${{ github.event.inputs.samples || '1' }}"
+          SHUTTER="${{ github.event.inputs.shutter || '0.5' }}"
+          CRF="${{ github.event.inputs.crf || '18' }}"
+          SCALE="${{ github.event.inputs.scale || '1' }}"
+          PRESET="${{ github.event.inputs.preset || 'fast' }}"
+
+          CMD="bun scripts/render.ts video --from $FROM --fps $FPS --samples $SAMPLES --shutter $SHUTTER --crf $CRF --scale $SCALE --preset $PRESET --out ../out/pdoom.mp4"
+          if [ -n "$TO" ]; then
+            CMD="$CMD --to $TO"
+          fi
+
+          echo "Running command: $CMD"
+          eval $CMD
+
+      - name: Check Output File
+        run: |
+          ls -lh out/
+          if [ ! -f out/pdoom.mp4 ]; then
+            echo "Error: out/pdoom.mp4 was not produced!"
+            exit 1
+          fi
+
+      - name: Upload Video Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: pdoom-music-video
+          path: out/pdoom.mp4
+          retention-days: 14
