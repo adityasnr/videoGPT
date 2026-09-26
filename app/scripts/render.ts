@@ -166,17 +166,33 @@ async function sheet(page: Page, times: number[], cols: number, out: string) {
 
 async function video(page: Page, from: number, to: number, fps: number, out: string) {
   mkdirSync(path.dirname(out), { recursive: true });
-  const crf = opt('crf', '16')!;
+  const fast = flag('fast');
+  const crf = opt('crf', fast ? '23' : '16')!;
+  const preset = opt('preset', fast ? 'ultrafast' : 'slow')!;
   const audio = path.join(ROOT, 'audio/pdoom.mp3');
   const args = ['ffmpeg', '-y', '-loglevel', 'error', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-s', `${OW}x${OH}`, '-r', String(fps), '-i', 'pipe:0'];
   if (!flag('noaudio')) args.push('-ss', String(from), '-t', String(to - from), '-i', audio);
-  args.push('-vf', 'vflip', '-c:v', 'libx264', '-preset', opt('preset', 'slow')!, '-crf', crf, '-pix_fmt', 'yuv420p', '-tune', 'grain', '-x264-params', opt('x264', 'aq-mode=3')!);
-  if (!flag('noaudio')) args.push('-c:a', 'aac', '-b:a', '320k', '-shortest');
+  args.push('-vf', 'vflip', '-c:v', 'libx264', '-preset', preset, '-crf', crf, '-pix_fmt', 'yuv420p');
+  if (!fast) {
+    args.push('-tune', 'grain', '-x264-params', opt('x264', 'aq-mode=3')!);
+  }
+  if (!flag('noaudio')) args.push('-c:a', 'aac', '-b:a', fast ? '192k' : '320k', '-shortest');
   args.push('-movflags', '+faststart', out);
   const ff = Bun.spawn(args, { stdin: 'pipe', stdout: 'inherit', stderr: 'inherit' });
   let frames = 0;
   const total = Math.round(to * fps) - Math.round(from * fps);
   const t0 = performance.now();
+  console.log(`\n╔══════════════════════════════════════════╗`);
+  console.log(`║         PDOOM VIDEO RENDERER             ║`);
+  console.log(`╠══════════════════════════════════════════╣`);
+  console.log(`║  Resolution : ${OW}×${OH}${' '.repeat(24 - `${OW}×${OH}`.length)}║`);
+  console.log(`║  FPS        : ${String(fps).padEnd(27)}║`);
+  console.log(`║  Frames     : ${String(total).padEnd(27)}║`);
+  console.log(`║  Duration   : ${formatDuration(to - from).padEnd(27)}║`);
+  console.log(`║  CRF        : ${crf.padEnd(27)}║`);
+  console.log(`║  Preset     : ${preset.padEnd(27)}║`);
+  console.log(`║  Mode       : ${(fast ? '⚡ FAST' : '🎬 QUALITY').padEnd(27)}║`);
+  console.log(`╚══════════════════════════════════════════╝\n`);
   const server = Bun.serve({
     port: 0,
     fetch(req, srv) { return srv.upgrade(req) ? undefined : new Response('ws only', { status: 400 }); },
