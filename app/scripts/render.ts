@@ -154,7 +154,12 @@ async function video(page: Page, from: number, to: number, fps: number, out: str
         ws.send(String(frames)); // ack: the page keeps at most a few frames ahead of ffmpeg (bounded memory at 4K)
         if (frames % 60 === 0 || frames === total) {
           const el = (performance.now() - t0) / 1000;
-          process.stdout.write(`\r${frames}/${total} frames  ${(frames / el).toFixed(1)} fps  eta ${((total - frames) / (frames / el)).toFixed(0)}s   `);
+          const msg = `${frames}/${total} frames (${((frames / total) * 100).toFixed(1)}%)  ${(frames / el).toFixed(1)} fps  eta ${((total - frames) / (frames / el)).toFixed(0)}s`;
+          if (process.env.CI) {
+            if (frames % 300 === 0 || frames === total) console.log(msg);
+          } else {
+            process.stdout.write(`\r${msg}   `);
+          }
         }
       },
     },

@@ -10,7 +10,7 @@ on:
       to:
         description: 'End time in seconds (leave empty for full song ~156.65s)'
         required: false
-        default: '15'
+        default: ''
       fps:
         description: 'Frames per second'
         required: false
@@ -44,7 +44,7 @@ on:
 
 jobs:
   render-video:
-    name: Render Video with Headless Chrome & FFmpeg
+    name: Render Full Music Video (2m 37s)
     runs-on: ubuntu-latest
     timeout-minutes: 360
 
@@ -68,9 +68,10 @@ jobs:
           bun install
           bunx playwright install --with-deps chromium
 
-      - name: Render Music Video
+      - name: Render Full Music Video
         working-directory: app
         env:
+          CI: 'true'
           PDOOM_THEME: ${{ github.event.inputs.theme || 'cyberpunk' }}
           CHROME_GL: 'angle'
         run: |
@@ -85,17 +86,12 @@ jobs:
           SCALE="${{ github.event.inputs.scale || '1' }}"
           PRESET="${{ github.event.inputs.preset || 'fast' }}"
 
-          # On git push, render a 15-second teaser to keep CI fast and verify pipeline
-          if [ "${{ github.event_name }}" = "push" ] && [ -z "$TO" ]; then
-            TO="15"
-          fi
-
           CMD="bun scripts/render.ts video --from $FROM --fps $FPS --samples $SAMPLES --shutter $SHUTTER --crf $CRF --scale $SCALE --preset $PRESET --out ../out/pdoom.mp4"
           if [ -n "$TO" ]; then
             CMD="$CMD --to $TO"
           fi
 
-          echo "Running command: $CMD"
+          echo "Executing: $CMD"
           xvfb-run -a --server-args="-screen 0 1920x1080x24" $CMD
 
       - name: Check Output File
@@ -106,9 +102,9 @@ jobs:
             exit 1
           fi
 
-      - name: Upload Video Artifact
+      - name: Upload Full Video Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: pdoom-music-video
+          name: pdoom-full-music-video
           path: out/pdoom.mp4
           retention-days: 14
